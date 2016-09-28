@@ -2,37 +2,39 @@ package wsproxy
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"strings"
 
 	"github.com/gorilla/websocket"
 	"golang.org/x/net/context"
 )
 
-var MethodOverrideParam = "method"
+func init() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
 
-// WebsocketProxy attempts to expose the underlying handler as a bidi websocket stream with newline-delimited
-// JSON as the content encoding.
+// WebsocketProxy attempts to expose the underlying handler as a bidi websocket
+// stream with newline-delimited JSON as the content encoding.
 //
-// The HTTP Authorization header is populated from the Sec-Websocket-Protocol field
+// The HTTP Authorization header is populated from the Sec-Websocket-Protocol
+// field.
 //
-// example:
+// Example:
+//
 //   Sec-Websocket-Protocol: Bearer, foobar
-// is converted to:
+//
+// Is converted to:
+//
 //   Authorization: Bearer foobar
 //
-// Method can be overwritten with the MethodOverrideParam get parameter in the requested URL
 func WebsocketProxy(h http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !websocket.IsWebSocketUpgrade(r) {
 			h.ServeHTTP(w, r)
-			return
+		} else {
+			websocketProxy(w, r, h)
 		}
-		websocketProxy(w, r, h)
 	}
 }
 
@@ -43,9 +45,6 @@ var upgrader = websocket.Upgrader{
 }
 
 func websocketProxy(w http.ResponseWriter, r *http.Request, h http.Handler) {
-	req, err := httputil.DumpRequest(r, true)
-	fmt.Println(err)
-	fmt.Println(string(req))
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("error upgrading websocket:", err)
@@ -62,10 +61,7 @@ func websocketProxy(w http.ResponseWriter, r *http.Request, h http.Handler) {
 		log.Println("error preparing request:", err)
 		return
 	}
-	if swsp := r.Header.Get("Sec-WebSocket-Protocol"); swsp != "" {
-		request.Header.Set("Authorization", strings.Replace(swsp, "Bearer, ", "Bearer ", 1))
-	}
-	if m := r.URL.Query().Get(MethodOverrideParam); m != "" {
+	if m := r.URL.Query().Get("method"); m != "" {
 		request.Method = m
 	}
 
